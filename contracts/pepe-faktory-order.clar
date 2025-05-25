@@ -1,7 +1,12 @@
-;; SP...limit-order-contract (with built-in signature verification)
-
-(define-constant structured-data-prefix 0x534950303138)
-(define-constant message-domain {name: "LIMIT_ORDER_FAKTORY", version: "v1.0", chain-id: chain-id})
+;; Pepe Faktory order
+;; Private until execution - MEV bots can't predict when/where orders will hit
+;; Users sign intents off-chain (no public mempool exposure)
+;; Eliminates front-running and sandwich attacks
+;; Built-in slippage protection with `min_out` parameters
+;; Predictable execution - get the price you expect
+ 
+(define-constant structured-data-prefix 0x534950303138) ;; SIP-018 
+(define-constant message-domain {name: "PEPE_FAKTORY_ORDER", version: "v1.0", chain-id: chain-id})
 (define-constant message-domain-hash (sha256 (unwrap-panic (to-consensus-buff? message-domain))))
 (define-constant structured-data-header (concat structured-data-prefix message-domain-hash))
 
@@ -33,31 +38,43 @@
     }) ERR_CONSENSUS_BUFF)))))
 
 (define-private (verify-signature
-    (signature (buff 65))
     (intent (string-ascii 32))
     (amount uint)
     (min-out uint)
-    (uuid (string-ascii 36)))
+    (uuid (string-ascii 36))
+    (signature (buff 65)))
   (let ((message-hash (hash-message intent amount min-out uuid)))
     (match (secp256k1-recover? message-hash signature)
       public-key (principal-of? public-key)
       error ERR_INVALID_SIGNATURE)))
 
 ;; === DEPOSIT FUNCTIONS ===
-(define-public (deposit-sbtc (amount uint))
+(define-public (deposit-sbtc (amount uint) (recipient (optional principal)))
   (let ((sender tx-sender)
-        (prev-bal (get-sbtc-balance sender)))
-    (try! (contract-call? 'SM3...sbtc-token transfer 
+        (recv   (default-to sender recipient))
+        (prev-bal (get-sbtc-balance recv)))
+    (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer 
            amount sender (as-contract tx-sender) none))
-    (map-set sbtc-balances sender (+ prev-bal amount))
+    (map-set sbtc-balances recv (+ prev-bal amount))
+    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token})
+    (ok true)))
+
+(define-public (deposit-pepe (amount uint) (recipient (optional principal)))
+  (let ((sender tx-sender)
+        (recv   (default-to sender recipient))
+        (prev-bal (get-pepe-balance recv)))
+    (try! (contract-call? 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz transfer 
+           amount sender (as-contract tx-sender) none))
+    (map-set pepe-balances recv (+ prev-bal amount))
+    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz})
     (ok true)))
 
 ;; === LIMIT ORDER EXECUTION ===
 (define-public (execute-limit-buy
-    (signature (buff 65))
     (sbtc-amount uint)
     (min-pepe-out uint)
-    (uuid (string-ascii 36)))
+    (uuid (string-ascii 36))
+    (signature (buff 65)))
   (begin
     ;; Check UUID hasn't been used
     (asserts! (is-none (map-get? submitted-uuids uuid)) ERR_UUID_SUBMITTED)
@@ -136,10 +153,10 @@
 
 ;; === HELPER FUNCTIONS ===
 (define-read-only (get-sbtc-balance (user principal))
-  (default-to u0 (map-get? sbtc-balances user)))
+  (ok (default-to u0 (map-get? sbtc-balances user))))
 
 (define-read-only (get-pepe-balance (user principal))
-  (default-to u0 (map-get? pepe-balances user)))
+  (ok (default-to u0 (map-get? pepe-balances user))))
 
 (define-read-only (check (uuid (string-ascii 36)))
   (is-some (map-get? submitted-uuids uuid))
