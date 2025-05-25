@@ -87,24 +87,33 @@
 (define-public (execute-limit-sell
     (signature (buff 65))
     (pepe-amount uint)
-    (uuid (string-ascii 36))
-    (min-sbtc-out uint))
-  (let (
-    (signer (try! (contract-call? 'SP...blaze-v1 execute 
-                   signature "LIMIT_SELL_PEPE" none 
-                   (some pepe-amount) none uuid)))
-    (user-pepe-bal (get-pepe-balance signer)))
+    (min-sbtc-out uint)
+    (uuid (string-ascii 36)))
+  (begin
+    ;; Check UUID hasn't been used
+    (asserts! (is-none (map-get? submitted-uuids uuid)) ERR_UUID_SUBMITTED)
     
-    (asserts! (>= user-pepe-bal pepe-amount) ERR_INSUFFICIENT_BALANCE)
-    (map-set pepe-balances signer (- user-pepe-bal pepe-amount))
-    
-    ;; Swap using existing AMM pool  
-    (let ((swap-result (try! (contract-call? 'SP...sBTC-PEPE-pool 
-                              swap-b-to-a pepe-amount min-sbtc-out))))
-      (let ((sbtc-received (get dy swap-result)))
-        (map-set sbtc-balances signer 
-                 (+ (get-sbtc-balance signer) sbtc-received))
-        (ok sbtc-received)))))
+    ;; Verify signature and get signer
+    (let ((signer (try! (verify-signature signature "LIMIT_SELL_PEPE" pepe-amount min-sbtc-out uuid)))
+          (user-pepe-bal (get-pepe-balance signer)))
+      
+      ;; Mark UUID as used
+      (map-set submitted-uuids uuid true)
+      
+      ;; Check balance
+      (asserts! (>= user-pepe-bal pepe-amount) ERR_INSUFFICIENT_BALANCE)
+      
+      ;; Deduct from user's balance
+      (map-set pepe-balances signer (- user-pepe-bal pepe-amount))
+      
+      ;; Execute swap
+      (let ((swap-result (try! (contract-call? 'SP...sBTC-PEPE-pool 
+                                swap-b-to-a pepe-amount min-sbtc-out))))
+        (let ((sbtc-received (get dy swap-result)))
+          ;; Credit user with sBTC
+          (map-set sbtc-balances signer 
+                   (+ (get-sbtc-balance signer) sbtc-received))
+          (ok sbtc-received))))))
 
 ;; === WITHDRAW FUNCTIONS ===
 (define-public (withdraw-sbtc (amount uint))
