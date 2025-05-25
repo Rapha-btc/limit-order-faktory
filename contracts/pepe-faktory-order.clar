@@ -14,7 +14,7 @@
 (define-constant ERR_INVALID_SIGNATURE (err u401))
 (define-constant ERR_UUID_SUBMITTED (err u402))
 (define-constant ERR_CONSENSUS_BUFF (err u403))
-
+(define-constant ERR_TOO_MUCH_SLIPPAGE (err u407))
 
 ;; Replay protection
 (define-map submitted-uuids (string-ascii 36) bool)
@@ -37,7 +37,7 @@
       uuid: uuid
     }) ERR_CONSENSUS_BUFF)))))
 
-(define-private (verify-signature
+(define-private (who-signed
     (intent (string-ascii 32))
     (amount uint)
     (min-out uint)
@@ -52,21 +52,21 @@
 (define-public (deposit-sbtc (amount uint) (recipient (optional principal)))
   (let ((sender tx-sender)
         (recv   (default-to sender recipient))
-        (prev-bal (get-sbtc-balance recv)))
+        (prev-bal (sbtc-balance-of recv)))
     (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer 
            amount sender (as-contract tx-sender) none))
     (map-set sbtc-balances recv (+ prev-bal amount))
-    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token})
+    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token, domain: .pepe-faktory-order})
     (ok true)))
 
 (define-public (deposit-pepe (amount uint) (recipient (optional principal)))
   (let ((sender tx-sender)
         (recv   (default-to sender recipient))
-        (prev-bal (get-pepe-balance recv)))
+        (prev-bal (pepe-balance-of recv)))
     (try! (contract-call? 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz transfer 
            amount sender (as-contract tx-sender) none))
     (map-set pepe-balances recv (+ prev-bal amount))
-    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz})
+    (print {event: "deposit", sender: sender, recipient: recv, amount: amount, token: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz, domain: .pepe-faktory-order})
     (ok true)))
 
 ;; === LIMIT ORDER EXECUTION ===
@@ -75,88 +75,89 @@
     (min-pepe-out uint)
     (uuid (string-ascii 36))
     (signature (buff 65)))
-  (begin
-    ;; Check UUID hasn't been used
-    (asserts! (is-none (map-get? submitted-uuids uuid)) ERR_UUID_SUBMITTED)
-    
-    ;; Verify signature and get signer
-    (let ((signer (try! (verify-signature signature "LIMIT_BUY_SBTC" sbtc-amount min-pepe-out uuid)))
-          (user-sbtc-bal (get-sbtc-balance signer)))
-      
-      ;; Mark UUID as used
-      (map-set submitted-uuids uuid true)
-      
-      ;; Check balance
-      (asserts! (>= user-sbtc-bal sbtc-amount) ERR_INSUFFICIENT_BALANCE)
-      
-      ;; Deduct from user's balance
-      (map-set sbtc-balances signer (- user-sbtc-bal sbtc-amount))
-      
-      ;; Execute swap
-      (let ((swap-result (try! (contract-call? 'SP...sBTC-PEPE-pool 
-                                swap-a-to-b sbtc-amount min-pepe-out))))
-        (let ((pepe-received (get dy swap-result)))
-          ;; Credit user with PEPE
-          (map-set pepe-balances signer 
-                   (+ (get-pepe-balance signer) pepe-received))
-          (ok pepe-received))))))
+    (if (map-insert submitted-uuids uuid true)
+            (let ((signer (try! (who-signed "LIMIT_BUY" sbtc-amount min-pepe-out uuid signature)))
+                  (user-sbtc-bal (sbtc-balance-of signer))
+                  (user-pepe-bal (pepe-balance-of signer))
+                  ((swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
+                                          swap-a-to-b sbtc-amount min-pepe-out)))))
+                  (pepe-received (get dy swap-result)))
+                 (asserts! (>= user-sbtc-bal sbtc-amount) ERR_INSUFFICIENT_BALANCE)
+                 (map-set sbtc-balances signer (- user-sbtc-bal sbtc-amount))
+                 (map-set pepe-balances signer (+ user-pepe-bal pepe-received))
+                 (print {event: "execute-limit-buy", 
+                         operator: tx-sender, 
+                         signer: signer, 
+                         token-a: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
+                         amount-a: sbtc-amount,
+                         token-b: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz
+                         amount-b: pepe-received})
+                 (ok pepe-received))
+            ERR_UUID_SUBMITTED))
 
 (define-public (execute-limit-sell
-    (signature (buff 65))
     (pepe-amount uint)
     (min-sbtc-out uint)
-    (uuid (string-ascii 36)))
-  (begin
-    ;; Check UUID hasn't been used
-    (asserts! (is-none (map-get? submitted-uuids uuid)) ERR_UUID_SUBMITTED)
-    
-    ;; Verify signature and get signer
-    (let ((signer (try! (verify-signature signature "LIMIT_SELL_PEPE" pepe-amount min-sbtc-out uuid)))
-          (user-pepe-bal (get-pepe-balance signer)))
-      
-      ;; Mark UUID as used
-      (map-set submitted-uuids uuid true)
-      
-      ;; Check balance
-      (asserts! (>= user-pepe-bal pepe-amount) ERR_INSUFFICIENT_BALANCE)
-      
-      ;; Deduct from user's balance
-      (map-set pepe-balances signer (- user-pepe-bal pepe-amount))
-      
-      ;; Execute swap
-      (let ((swap-result (try! (contract-call? 'SP...sBTC-PEPE-pool 
-                                swap-b-to-a pepe-amount min-sbtc-out))))
-        (let ((sbtc-received (get dy swap-result)))
-          ;; Credit user with sBTC
-          (map-set sbtc-balances signer 
-                   (+ (get-sbtc-balance signer) sbtc-received))
-          (ok sbtc-received))))))
+    (uuid (string-ascii 36))
+    (signature (buff 65)))
+    (if (map-insert submitted-uuids uuid true)
+    (let ((signer (try! (who-signed "LIMIT_SELL" pepe-amount min-sbtc-out uuid signature)))
+          (user-pepe-bal (pepe-balance-of signer))
+          (user-sbtc-bal (sbtc-balance-of signer))
+          ((swap-result (try! (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
+                                swap-b-to-a pepe-amount))))
+          (sbtc-received (get dy swap-result)))
+         (asserts! (>= user-pepe-bal pepe-amount) ERR_INSUFFICIENT_BALANCE)
+         (asserts! (>= sbtc-received min-sbtc-out) ERR_TOO_MUCH_SLIPPAGE)
+         (map-set pepe-balances signer (- user-pepe-bal pepe-amount))
+         (map-set sbtc-balances signer (+ user-sbtc-bal sbtc-received))
+         (print {event: "execute-limit-sell", 
+                 operator: tx-sender, 
+                 signer: signer, 
+                 token-a: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
+                 amount-a: sbtc-amount,
+                 token-b: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz
+                 amount-b: pepe-received})
+         (ok sbtc-received))
+    ERR_UUID_SUBMITTED))
 
 ;; === WITHDRAW FUNCTIONS ===
-(define-public (withdraw-sbtc (amount uint))
+(define-public (withdraw-sbtc (amount uint) (recipient (optional principal)))
   (let ((sender tx-sender)
-        (user-bal (get-sbtc-balance sender)))
-    (asserts! (>= user-bal amount) ERR_INSUFFICIENT_BALANCE)
-    (map-set sbtc-balances sender (- user-bal amount))
-    (try! (as-contract (contract-call? 'SM3...sbtc-token transfer 
-           amount tx-sender sender none)))
+        (recv  (default-to sender recipient))
+        (bal (sbtc-balance-of recv)))
+    (asserts! (>= bal amount) ERR_INSUFFICIENT_BALANCE)
+    (map-set sbtc-balances sender (- bal amount))
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer 
+           amount tx-sender recv none)))
+    (print {event: "withdraw", sender: sender, recipient: recv, amount: amount, token: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token, domain: .pepe-faktory-order})
     (ok true)))
 
-(define-public (withdraw-pepe (amount uint))
+(define-public (withdraw-pepe (amount uint) (recipient (optional principal)))
   (let ((sender tx-sender)
-        (user-bal (get-pepe-balance sender)))
-    (asserts! (>= user-bal amount) ERR_INSUFFICIENT_BALANCE)
-    (map-set pepe-balances sender (- user-bal amount))
-    (try! (as-contract (contract-call? 'SP...pepe-token transfer 
-           amount tx-sender sender none)))
+        (recv  (default-to sender recipient))
+        (bal (pepe-balance-of recv)))
+    (asserts! (>= bal amount) ERR_INSUFFICIENT_BALANCE)
+    (map-set pepe-balances sender (- bal amount))
+    (try! (as-contract (contract-call? 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz transfer 
+           amount tx-sender recv none)))
+    (print {event: "withdraw", sender: sender, recipient: recv, amount: amount, token: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz, domain: .pepe-faktory-order})
     (ok true)))
 
 ;; === HELPER FUNCTIONS ===
 (define-read-only (get-sbtc-balance (user principal))
-  (ok (default-to u0 (map-get? sbtc-balances user))))
+  (ok (sbtc-balance-of user)))
 
 (define-read-only (get-pepe-balance (user principal))
-  (ok (default-to u0 (map-get? pepe-balances user))))
+  (ok (pepe-balance-of user)))
+
+(define-private (sbtc-balance-of (who principal))
+  (default-to u0 (map-get? sbtc-balances who))
+)
+
+(define-private (pepe-balance-of (who principal))
+  (default-to u0 (map-get? pepe-balances who))
+)
 
 (define-read-only (check (uuid (string-ascii 36)))
   (is-some (map-get? submitted-uuids uuid))
