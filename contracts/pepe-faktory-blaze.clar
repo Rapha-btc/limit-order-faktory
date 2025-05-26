@@ -21,24 +21,12 @@
     (min-pepe-out uint)
     (uuid (string-ascii 36))
     (signature (buff 65)))
-  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_BUY" none (some sbtc-amount) (some min-pepe-out) uuid)))
+  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_BUY" none (some sbtc-amount) none uuid))) 
         (user-sbtc-bal (unwrap! (contract-call? SBTC-SUBNET get-balance signer) (err u500)))
         (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
-                                        swap-a-to-b sbtc-amount min-pepe-out))))
-        (pepe-received (get dy swap-result)))
-    
-    ;; Check sufficient balance in subnet
-    (asserts! (>= user-sbtc-bal sbtc-amount) ERR_INSUFFICIENT_BALANCE)
-    
-    ;; Check slippage protection
-    (asserts! (> pepe-received min-pepe-out) ERR_TOO_MUCH_SLIPPAGE)
-    
-    ;; Transfer sbtc from user's subnet balance to this contract
+                                        swap-a-to-b sbtc-amount min-pepe-out))))) ;; post condition baked in pool
     (try! (contract-call? SBTC-SUBNET x-transfer signature sbtc-amount uuid (as-contract tx-sender)))
-    
-    ;; Deposit the received pepe into user's pepe subnet balance
     (try! (as-contract (contract-call? PEPE-SUBNET deposit pepe-received (some signer))))
-    
     (print {event: "execute-limit-buy", 
             operator: tx-sender, 
             signer: signer, 
@@ -53,31 +41,24 @@
     (min-sbtc-out uint)
     (uuid (string-ascii 36))
     (signature (buff 65)))
-  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_SELL" none (some pepe-amount) (some min-sbtc-out) uuid)))
+  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_SELL" none (some pepe-amount) none uuid)))
         (user-pepe-bal (unwrap! (contract-call? PEPE-SUBNET get-balance signer) (err u500)))
         (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
                                         swap-b-to-a pepe-amount))))
         (sbtc-received (get dy swap-result)))
-    
-    ;; Check sufficient balance in subnet
     (asserts! (>= user-pepe-bal pepe-amount) ERR_INSUFFICIENT_BALANCE)
-    
-    ;; Check slippage protection  
-    (asserts! (> sbtc-received min-sbtc-out) ERR_TOO_MUCH_SLIPPAGE)
-    
-    ;; Transfer pepe from user's subnet balance to this contract
+    (asserts! (>= sbtc-received min-sbtc-out) ERR_TOO_MUCH_SLIPPAGE)
     (try! (contract-call? PEPE-SUBNET x-transfer signature pepe-amount uuid (as-contract tx-sender)))
-    
-    ;; Deposit the received sbtc into user's sbtc subnet balance
+    ;; no here we need to withdraw from pepe to this contract
+    ;; then we need to swap b to a
     (try! (as-contract (contract-call? SBTC-SUBNET deposit sbtc-received (some signer))))
-    
     (print {event: "execute-limit-sell", 
             operator: tx-sender, 
             signer: signer, 
-            token-a: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz,
-            amount-a: pepe-amount,
-            token-b: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
-            amount-b: sbtc-received})
+            token-a: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
+            amount-a: sbtc-received,
+            token-b: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz,
+            amount-b: pepe-amount})
     (ok sbtc-received)))
 
 ;; === HELPER FUNCTIONS ===
