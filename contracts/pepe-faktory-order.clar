@@ -79,8 +79,8 @@
             (let ((signer (try! (who-signed "LIMIT_BUY" sbtc-amount min-pepe-out uuid signature)))
                   (user-sbtc-bal (sbtc-balance-of signer))
                   (user-pepe-bal (pepe-balance-of signer))
-                  ((swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
-                                          swap-a-to-b sbtc-amount min-pepe-out)))))
+                  (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
+                                          swap-a-to-b sbtc-amount min-pepe-out))))
                   (pepe-received (get dy swap-result)))
                  (asserts! (>= user-sbtc-bal sbtc-amount) ERR_INSUFFICIENT_BALANCE)
                  (map-set sbtc-balances signer (- user-sbtc-bal sbtc-amount))
@@ -115,9 +115,9 @@
                  operator: tx-sender, 
                  signer: signer, 
                  token-a: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token,
-                 amount-a: sbtc-amount,
+                 amount-a: sbtc-received,
                  token-b: 'SP1Z92MPDQEWZXW36VX71Q25HKF5K2EPCJ304F275.tokensoft-token-v4k68639zxz
-                 amount-b: pepe-received})
+                 amount-b: pepe-amount})
          (ok sbtc-received))
     ERR_UUID_SUBMITTED))
 
