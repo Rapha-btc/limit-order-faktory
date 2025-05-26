@@ -18,6 +18,8 @@
 (define-constant BLAZE-V1 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-v1)
 
 ;; Helper function to decode uint from bytes
+;; buff-to-uint-be supports up to 16 bytes (340+ undecillion max value)
+;; This easily handles token amounts with 8 decimals like 2000000000000000
 (define-private (decode-uint-from-bytes (bytes-opt (optional (buff 16))))
   (match bytes-opt
     bytes-val (buff-to-uint-be bytes-val)
