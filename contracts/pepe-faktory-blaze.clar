@@ -1,4 +1,4 @@
-;; Pepe Faktory order - Subnet Integration Version
+;; Pepe Faktory order - Blaze Subnet Integration Version
 ;; Uses existing sbtc-token-subnet-v1 and pepe-token-subnet-v1 for token management
 ;; Private until execution - MEV bots can't predict when/where orders will hit
 ;; Users sign intents off-chain (no public mempool exposure)
