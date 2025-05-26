@@ -5,6 +5,8 @@
 ;; Eliminates front-running and sandwich attacks
 ;; Built-in slippage protection with `min_out` parameters
 ;; Predictable execution - get the price you expect
+;; The user is signing the full trade terms including slippage protection, 
+;; so operators can't execute at terrible prices!
 
 ;; Use blaze-v1 for signature verification and replay protection
 (define-constant ERR_INSUFFICIENT_BALANCE (err u400))
