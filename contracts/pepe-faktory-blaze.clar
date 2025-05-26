@@ -26,6 +26,8 @@
         (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
                                         swap-a-to-b sbtc-amount min-pepe-out))))) ;; post condition baked in pool
     (try! (contract-call? SBTC-SUBNET x-transfer signature sbtc-amount uuid (as-contract tx-sender)))
+    ;; then this contract must withdraw from sbtc subnet
+    ;; swap a to b must happen after the above line
     (try! (as-contract (contract-call? PEPE-SUBNET deposit pepe-received (some signer))))
     (print {event: "execute-limit-buy", 
             operator: tx-sender, 
