@@ -18,11 +18,12 @@
 ;; === LIMIT ORDER EXECUTION ===
 (define-public (execute-limit-buy
     (sbtc-amount uint)
-    (min-pepe-out uint)
+    (min-pepe-out-as-bytes (optional (buff 16)))
     (uuid (string-ascii 36))
     (signature (buff 65)))
-  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_BUY" none (some sbtc-amount) none uuid))) 
+  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_BUY" min-pepe-out-as-bytes (some sbtc-amount) (some (as-contract tx-sender)) uuid))) 
         (user-sbtc-bal (unwrap! (contract-call? SBTC-SUBNET get-balance signer) (err u500)))
+        (min-pepe-out u100000) ;; decode min-pepe-out-as-bytes into min-pepe-out
         (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
                                         swap-a-to-b sbtc-amount min-pepe-out))))) ;; post condition baked in pool
     (try! (contract-call? SBTC-SUBNET x-transfer signature sbtc-amount uuid (as-contract tx-sender)))
@@ -40,11 +41,12 @@
 
 (define-public (execute-limit-sell
     (pepe-amount uint)
-    (min-sbtc-out uint)
+    (min-sbtc-out-as-bytes (optional (buff 16)))
     (uuid (string-ascii 36))
     (signature (buff 65)))
-  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_SELL" none (some pepe-amount) none uuid)))
+  (let ((signer (try! (contract-call? BLAZE-V1 execute signature "LIMIT_SELL" min-sbtc-out-as-bytes (some pepe-amount) (some (as-contract tx-sender)) uuid)))
         (user-pepe-bal (unwrap! (contract-call? PEPE-SUBNET get-balance signer) (err u500)))
+        (min-sbtc-out u100000) ;; decode 
         (swap-result (try! (as-contract (contract-call? 'SP6SA6BTPNN5WDAWQ7GWJF1T5E2KWY01K9SZDBJQ.pepe-faktory-pool 
                                         swap-b-to-a pepe-amount))))
         (sbtc-received (get dy swap-result)))
