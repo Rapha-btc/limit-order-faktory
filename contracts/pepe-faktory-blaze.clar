@@ -86,3 +86,21 @@
 
 (define-read-only (check-uuid (uuid (string-ascii 36)))
   (contract-call? BLAZE-V1 check uuid))
+
+;; New helper function - show user their Stacks address from Bitcoin signature
+(define-read-only (get-stx-address-from-btc-signature
+    (message-hash (buff 32))
+    (signature (buff 65)))
+  (let ((public-key (try! (secp256k1-recover? message-hash signature))))
+    (principal-of? public-key)))
+
+;; Bitcoin address conversion: Not needed for signatures
+;; Same cryptographic identity: Bitcoin private key = Stacks private key
+;; Seamless UX: Users sign with familiar Bitcoin wallet, assets appear in corresponding Stacks address
+
+;; This is actually cleaner than address conversion - you're working directly with the cryptographic identity!
+
+;; okay so now we need to do this but for bitcoin signed messages 
+;; and then simply use this
+;; (stx-address (try! (btc-to-stx btc-address)))
+;;       (sbtc-balance (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token get-balance stx-address)))
