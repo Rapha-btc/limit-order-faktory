@@ -99,7 +99,7 @@
     (if (is-eq operation OP_SWAP_A_TO_B)
       (swap-a-to-b amount u0)
       (if (is-eq operation OP_SWAP_B_TO_A)
-        (swap-b-to-a amount)
+        (swap-b-to-a amount u0)
         (if (is-eq operation OP_ADD_LIQUIDITY)
           (add-liquidity amount)
           (if (is-eq operation OP_REMOVE_LIQUIDITY)
