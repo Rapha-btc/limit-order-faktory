@@ -104,8 +104,8 @@
     (signature (buff 65))
     (amount uint)
     (uuid   (string-ascii 36))
-    (to     principal))
-    (opcode (optional (buff 16)))
+    (to     principal)
+    (opcode (optional (buff 16))))  ;; Fixed parameter position
   (let ((signer (try! (contract-call? 'SP2ZNGJ85ENDY6QRHQ5P2D4FXKGZWCKTB2T0Z55KS.blaze-v1 execute signature "TRANSFER_TOKENS" opcode (some amount) (some to) uuid))))
     (try! (internal-transfer signer to amount))
     (print {event: "x-transfer-op", from: signer, to: to, amount: amount, uuid: uuid, opcode: opcode})
